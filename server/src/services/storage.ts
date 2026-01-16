@@ -184,7 +184,7 @@ export async function uploadFile(buffer: Buffer, filename: string): Promise<stri
         metadata: { contentType: getContentType(filename) },
       });
 
-      await file.makePublic();
+      // Note: makePublic() removed - bucket should be configured with public access
       const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/files/${filename}`;
       console.log('Image uploaded to GCS:', publicUrl);
       return publicUrl;
