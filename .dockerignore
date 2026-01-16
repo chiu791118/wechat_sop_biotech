@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Git
+.git/
+.gitignore
+
+# Environment
+.env
+.env.*
+
+# Build outputs (we rebuild in Docker)
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log
+
+# Documentation
+*.md
+!README.md
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Uploads and downloads
+uploads/
+downloads/
+data/
+
+# Temporary
+tmp/
+temp/
