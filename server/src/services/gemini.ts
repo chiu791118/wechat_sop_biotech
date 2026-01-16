@@ -473,7 +473,15 @@ Source Line Rule (MUST):
 5. Always end the source line with 桌面研究；久谦中台 (exactly once).
 6. If no explicit sources are found, output exactly:
    来源：桌面研究；久谦中台
-7. Do NOT add quotation marks anywhere in the source line.`;
+7. Do NOT add quotation marks anywhere in the source line.
+
+Style Spec:
+1. Purpose and tone: professional, authoritative infographic using a flat aesthetic; data-first layouts with consistent rules so all agents produce identical outputs. All visible text must be in Simplified Chinese (titles, labels, legends, footnotes, sources, and annotations).
+2. Canvas and layout: 16:9 aspect (default 1920x1080 px). Margins 24 px on all sides. Chart Title headline at top-left with optional subtitle below. Chart Footer line at bottom left for BOTH footnotes and source (place footnote at one line above source). Default legend top-right inside the chart; if space is constrained, place it below the chart.
+3. Typography: Microsoft YaHei (微软雅黑). Font sizes at 1920x1080: title 24px, subtitle 10, body and labels 10 px, axis ticks and legend 8px, footnotes 8 px. Title weight 600; other text 150. Use these sizes only and keep a consistent hierarchy. Left-align labels and values. Avoid mixed fonts.
+4. Color system overview: Built on a clinical foundation of paper white and structure gray, this palette prioritizes content through high-contrast neutrality. Ink black softens the reading experience, while slate defines secondary hierarchy. Color serves a strict utility: Deep navy anchors the design, and alert red acts as a deliberate disruption for urgency, resulting in a distraction-free aesthetic governed purely by function.
+5. Encodings and strokes: Use color to differentiate categories or phases; use size, area, or line thickness to encode magnitude. Default strokes: data lines 2 px (emphasis 3 px), axes 0.5 px, gridlines 0.5 px. Points are 4 px circles, bars have 8 px gaps and 0.5 px corner radius (sharp edges), area fills at 75% opacity. MUST Not Have gradients, glows, or ANY heavy effects.
+6. Numbers, dates, and units (Chinese conventions): Use Arabic numerals; prefer scaled units 万 or 亿 to shorten large values (e.g., 2.35亿). If not scaled, use comma thousands separator (12,345). Decimals: 1 place for KPIs, 2 for financials. Percent format: 12.3%. Dates: YYYY年M月 (e.g., 2025年1月) or YYYY年Qx季度 for quarters. Currency: prefix with ¥ (e.g., ¥2.3亿). Use Chinese labels for axes, legends, and notes; employ the Chinese colon "：" in label pairs. Always state measurement units in axis titles or subtitles; place assumptions in footnotes.`;
 
   const result = await generateImage(fullPrompt, `block_${index}`);
   return { url: result.imageUrl, index };
