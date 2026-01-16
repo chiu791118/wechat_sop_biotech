@@ -423,10 +423,26 @@ The image should convey scientific seriousness and analytical intent, not innova
 }
 
 export async function generateBlockImage(imagePrompt: string, index: number): Promise<{ url: string; index: number }> {
-  const fullPrompt = `Generate a professional scientific illustration or data visualization.
+  const fullPrompt = `Generate Image: Create a professional scientific infographic or data visualization
+using ONLY the information explicitly provided in the Image Block Content.
+
+Image Block Content is the sole source of truth for this image.
+You may only reorganize, summarize, and visualize what is already present
+in the Image Block Content.
 
 Content focus:
 ${imagePrompt}
+
+Use the Image Block Content to define the topic and structure the overall thought.
+
+MUST Follow the Given "Style Spec".
+Be thoughtful and exhaustive strictly within the bounds of the Image Block Content.
+Minimize ALL textual redundancies in the output.
+Avoid ALL ambiguities.
+
+Hard Constraint:
+Do NOT introduce any facts, numbers, names, categories, interpretations,
+or claims that are not explicitly present in the Image Block Content.
 
 Design requirements:
 - Purpose: clarify biological mechanism, clinical trial structure, or data relationship
@@ -441,11 +457,23 @@ If applicable:
 
 Strict prohibitions:
 - No futuristic or abstract visuals
-- No cityscapes, light effects, or "technology aesthetics"
+- No cityscapes, light effects, or technology aesthetics
 - No decorative icons
 - No exaggeration or dramatization
 
-The image must be interpretable as a scientific explanatory figure, not a marketing graphic.`;
+The image must be interpretable as a scientific explanatory figure,
+not a marketing or summary graphic.
+
+Source Line Rule (MUST):
+1. In the footer source position, output a single line beginning with 来源：.
+2. Automatically extract and list all explicitly mentioned sources from the Image Block Content
+   (e.g., 年报/财报/招股书/公告/官网/研报/数据库/统计机构/媒体与报告标题等).
+3. De-duplicate extracted sources while preserving first-appearance order.
+4. Use the Chinese semicolon ； to separate items.
+5. Always end the source line with 桌面研究；久谦中台 (exactly once).
+6. If no explicit sources are found, output exactly:
+   来源：桌面研究；久谦中台
+7. Do NOT add quotation marks anywhere in the source line.`;
 
   const result = await generateImage(fullPrompt, `block_${index}`);
   return { url: result.imageUrl, index };
