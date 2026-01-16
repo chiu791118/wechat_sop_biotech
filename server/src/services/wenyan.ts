@@ -31,6 +31,12 @@ interface WeChatMediaResponse {
   errmsg?: string;
 }
 
+interface WeChatUploadImgResponse {
+  url?: string;
+  errcode?: number;
+  errmsg?: string;
+}
+
 // WeChat-compatible CSS styles (using style block instead of inline to reduce size)
 const WECHAT_CSS = `
 <style>
@@ -204,7 +210,86 @@ async function getAccessToken(): Promise<string> {
   return data.access_token;
 }
 
-// Upload image to WeChat and get media_id
+// Upload article content image to WeChat and get URL (for images inside article)
+async function uploadArticleImageToWeChat(accessToken: string, imageUrl: string): Promise<string> {
+  console.log('Uploading article image to WeChat...');
+  console.log('Image URL:', imageUrl);
+
+  // Download image from URL
+  let imageBuffer: Buffer;
+  let contentType = 'image/png';
+
+  if (imageUrl.startsWith('data:')) {
+    // Handle base64 data URL
+    const matches = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!matches) {
+      throw new Error('Invalid data URL format');
+    }
+    contentType = matches[1];
+    imageBuffer = Buffer.from(matches[2], 'base64');
+  } else if (imageUrl.startsWith('/data/') || imageUrl.startsWith('./data/')) {
+    // Handle local file path
+    const fs = await import('fs');
+    const path = await import('path');
+    const localPath = imageUrl.startsWith('/data/')
+      ? path.join(process.cwd(), imageUrl)
+      : imageUrl;
+
+    if (!fs.existsSync(localPath)) {
+      throw new Error(`Local image file not found: ${localPath}`);
+    }
+    imageBuffer = fs.readFileSync(localPath);
+    contentType = imageUrl.endsWith('.jpg') || imageUrl.endsWith('.jpeg') ? 'image/jpeg' : 'image/png';
+    console.log('Local image loaded, size:', imageBuffer.length, 'bytes');
+  } else if (imageUrl.startsWith('https://storage.googleapis.com/')) {
+    // Download from GCS URL
+    const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+    imageBuffer = Buffer.from(response.data);
+    contentType = response.headers['content-type'] || 'image/png';
+    console.log('GCS image downloaded, size:', imageBuffer.length, 'bytes');
+  } else {
+    // Download from other URL using axios
+    const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+    imageBuffer = Buffer.from(response.data);
+    contentType = response.headers['content-type'] || 'image/png';
+  }
+
+  console.log('Image downloaded, size:', imageBuffer.length, 'bytes, type:', contentType);
+
+  // Upload to WeChat using uploadimg API (returns URL, not media_id)
+  const url = `${WECHAT_UPLOADIMG_URL}?access_token=${accessToken}`;
+  const extension = contentType.includes('jpeg') || contentType.includes('jpg') ? 'jpg' : 'png';
+  const filename = `article_img_${Date.now()}.${extension}`;
+
+  const formData = new FormData();
+  formData.append('media', imageBuffer, {
+    filename: filename,
+    contentType: contentType,
+  });
+
+  const uploadResponse = await axios.post(url, formData, {
+    headers: {
+      ...formData.getHeaders(),
+    },
+    maxContentLength: Infinity,
+    maxBodyLength: Infinity,
+  });
+
+  const result = uploadResponse.data as WeChatUploadImgResponse;
+
+  if (result.errcode) {
+    throw new Error(`WeChat uploadimg error: ${result.errmsg} (code: ${result.errcode})`);
+  }
+
+  if (!result.url) {
+    throw new Error('Failed to get URL from WeChat uploadimg');
+  }
+
+  console.log('Article image uploaded, WeChat URL:', result.url);
+  return result.url;
+}
+
+// Upload image to WeChat and get media_id (for cover image)
 async function uploadImageToWeChat(accessToken: string, imageUrl: string): Promise<string> {
   console.log('Uploading cover image to WeChat...');
   console.log('Image URL:', imageUrl);
@@ -275,6 +360,59 @@ async function uploadImageToWeChat(accessToken: string, imageUrl: string): Promi
 
   console.log('Cover image uploaded, media_id:', result.media_id);
   return result.media_id;
+}
+
+// Process markdown to upload all images to WeChat and replace URLs
+async function processMarkdownImages(accessToken: string, markdownContent: string): Promise<string> {
+  console.log('Processing markdown images for WeChat...');
+
+  // Find all markdown image patterns: ![alt](url) or ![alt](url "title")
+  const imagePattern = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g;
+
+  // Collect all unique image URLs
+  const imageUrls = new Set<string>();
+  let match;
+  while ((match = imagePattern.exec(markdownContent)) !== null) {
+    const imageUrl = match[2];
+    // Only process local or GCS URLs (skip already-uploaded WeChat URLs)
+    if (!imageUrl.startsWith('http://mmbiz.') && !imageUrl.startsWith('https://mmbiz.')) {
+      imageUrls.add(imageUrl);
+    }
+  }
+
+  const imageUrlArray = Array.from(imageUrls);
+  console.log(`Found ${imageUrlArray.length} images to upload to WeChat`);
+
+  if (imageUrlArray.length === 0) {
+    return markdownContent;
+  }
+
+  // Upload each image and create a mapping
+  const urlMapping: Record<string, string> = {};
+
+  for (const originalUrl of imageUrlArray) {
+    try {
+      console.log(`Uploading image: ${originalUrl}`);
+      const wechatUrl = await uploadArticleImageToWeChat(accessToken, originalUrl);
+      urlMapping[originalUrl] = wechatUrl;
+    } catch (error) {
+      console.error(`Failed to upload image ${originalUrl}:`, error);
+      // Keep original URL if upload fails
+    }
+  }
+
+  // Replace all image URLs in markdown
+  let processedContent = markdownContent;
+  for (const originalUrl of Object.keys(urlMapping)) {
+    const wechatUrl = urlMapping[originalUrl];
+    // Escape special regex characters in URL
+    const escapedUrl = originalUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const replacePattern = new RegExp(escapedUrl, 'g');
+    processedContent = processedContent.replace(replacePattern, wechatUrl);
+  }
+
+  console.log('Markdown images processed successfully');
+  return processedContent;
 }
 
 // Render markdown to HTML using built-in marked library
@@ -385,12 +523,17 @@ export async function publishToWeChat(
       console.log('No cover image provided, skipping upload');
     }
 
-    // Step 3: Render markdown to HTML
+    // Step 3: Process article images - upload to WeChat and replace URLs
+    console.log('Processing article images...');
+    const processedMarkdown = await processMarkdownImages(accessToken, articleMarkdown);
+    console.log('Article images processed');
+
+    // Step 4: Render markdown to HTML
     console.log('Rendering markdown to HTML...');
-    const htmlContent = await renderMarkdownToHtml(articleMarkdown);
+    const htmlContent = await renderMarkdownToHtml(processedMarkdown);
     console.log('HTML rendered, length:', htmlContent.length);
 
-    // Step 4: Create draft
+    // Step 5: Create draft
     console.log('Creating draft...');
     if (!thumbMediaId) {
       throw new Error('Cover image (thumb_media_id) is required for WeChat drafts. Please generate or upload a cover image first.');

@@ -6,18 +6,24 @@ import path from 'path';
 const BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'wechat-sop-data';
 const DATA_DIR = process.env.NODE_ENV === 'production' ? '/tmp/data' : './data';
 
-// Initialize GCS client
+// Initialize GCS client - always try to initialize for image uploads
 let storage: Storage | null = null;
+let gcsAvailable = false;
+
 try {
-  // Only use GCS in production or if GOOGLE_APPLICATION_CREDENTIALS is set
-  if (process.env.NODE_ENV === 'production' || process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    storage = new Storage();
-    console.log('Using Google Cloud Storage');
-  } else {
-    console.log('Using local storage (development mode)');
-  }
+  storage = new Storage();
+  gcsAvailable = true;
+  console.log('Google Cloud Storage initialized');
 } catch (error) {
-  console.warn('GCS not configured, using local storage');
+  console.warn('GCS initialization failed:', error);
+}
+
+// For data files (articles.json etc), always use local in development for faster access
+const useLocalForData = process.env.NODE_ENV !== 'production';
+if (useLocalForData) {
+  console.log('Using local storage for data files (development mode)');
+} else {
+  console.log('Using GCS for data files');
 }
 
 // In-memory cache
@@ -168,26 +174,35 @@ export async function saveJiuqianPrompt(prompt: string): Promise<void> {
 // =====================
 
 export async function uploadFile(buffer: Buffer, filename: string): Promise<string> {
-  if (storage) {
-    const bucket = storage.bucket(BUCKET_NAME);
-    const file = bucket.file(`files/${filename}`);
+  // Try GCS first if available
+  if (storage && gcsAvailable) {
+    try {
+      const bucket = storage.bucket(BUCKET_NAME);
+      const file = bucket.file(`files/${filename}`);
 
-    await file.save(buffer, {
-      metadata: { contentType: getContentType(filename) },
-    });
+      await file.save(buffer, {
+        metadata: { contentType: getContentType(filename) },
+      });
 
-    await file.makePublic();
-    return `https://storage.googleapis.com/${BUCKET_NAME}/files/${filename}`;
-  } else {
-    // Local storage fallback
-    const filePath = path.join(DATA_DIR, 'files', filename);
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+      await file.makePublic();
+      const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/files/${filename}`;
+      console.log('Image uploaded to GCS:', publicUrl);
+      return publicUrl;
+    } catch (error) {
+      console.error('GCS upload failed, falling back to local storage:', error);
+      // Fall through to local storage
     }
-    fs.writeFileSync(filePath, buffer);
-    return `/data/files/${filename}`;
   }
+
+  // Local storage fallback
+  const filePath = path.join(DATA_DIR, 'files', filename);
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  fs.writeFileSync(filePath, buffer);
+  console.log('Image saved locally:', filePath);
+  return `/data/files/${filename}`;
 }
 
 // =====================
@@ -203,7 +218,8 @@ async function readData(filename: string, isText: boolean = false): Promise<unkn
 
   let data: unknown;
 
-  if (storage) {
+  // Use local storage in development, GCS in production
+  if (!useLocalForData && storage) {
     const bucket = storage.bucket(BUCKET_NAME);
     const file = bucket.file(`data/${filename}`);
 
@@ -232,7 +248,8 @@ async function readData(filename: string, isText: boolean = false): Promise<unkn
 async function writeData(filename: string, data: unknown, isText: boolean = false): Promise<void> {
   const content = isText ? (data as string) : JSON.stringify(data, null, 2);
 
-  if (storage) {
+  // Use local storage in development, GCS in production
+  if (!useLocalForData && storage) {
     console.log('Storage: Writing to GCS:', filename);
     const bucket = storage.bucket(BUCKET_NAME);
     const file = bucket.file(`data/${filename}`);
