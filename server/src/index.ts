@@ -1,11 +1,10 @@
+// Load environment variables FIRST
+import './env';
+
+import path from 'path';
 import express from 'express';
 import cors from 'cors';
-import path from 'path';
-import dotenv from 'dotenv';
 import apiRoutes from './routes/api';
-
-// Load .env from root directory
-dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
