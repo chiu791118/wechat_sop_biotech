@@ -1426,23 +1426,22 @@ ${WRITING_STYLE_REQUIREMENTS}
 // =====================
 
 export async function generateImageText(articleMarkdown: string): Promise<string> {
-  const prompt = `Please think in English and output in Chinese. Give yourself more time to think before you start writing.
-第一步：通读全文，仅筛选**在生物学、临床或药物开发层面信息密度过高**、不适合用纯文字理解的段落或表格。
+  const prompt = `
 
-你只能选择满足以下至少一项条件的内容：
+Please think in English and output in Chinese. Give yourself more time to think before you start writing.
+第一步：请你浏览全文，筛选出其中你认为信息密度过高、文字阅读体验不好、可读性最差、适合用PPT呈现的段落/ 章节们，以及所有表格；你至多可以选择2000字左右的段落/ 章节（表格必选），但需要至少选择出5个段落
+满足以下至少一项条件的内容優先：
 1. 机制路径、靶点作用逻辑、信号通路描述
 2. 临床试验设计（入组标准、终点、分组）
 3. 临床结果的数据性总结（有效性 / 安全性）
 4. 管线结构、适应症扩展逻辑
 5. 多药物 / 多机制的对比信息
-6. 所有表格（必须选）
-
-第二步：在原文中，用【【【】】】标记你选择的段落或表格，其余文字**一个字都不要改**。
+第二步：在原文中增加特殊段落标记，把你筛选出的内容用三个中括号括起来，其他内容一个字都不要修改
 
 第三步：在每个被标记段落前，用不超过100字的中文，概括该段落**希望通过图示澄清的科学或临床问题**。
 概括必须是完整句子，不得使用营销或宣传语言。
 
-第四步：输出添加了概括说明和【【【】】】标记的全文。
+第四步：输出加上概括、打上特殊段落标记的全文，再次注意：除了概括与特殊标记，其他一个字都不要修改，且"【【【""】】】"必须成对出现
 
 注意：
 - 禁止选择纯叙事性、判断性、结论性段落
@@ -1514,34 +1513,24 @@ export function extractImageParagraphs(imageText: string): { content: string; su
 // Step 5c: Image Prompts Generation (配圖提示詞生成)
 // =====================
 
-export async function generateImagePrompts(imageText: string): Promise<string[]> {
-  const paragraphs = extractImageParagraphs(imageText);
-  const prompts: string[] = [];
+Please think in English and output in Chinese. Give yourself more time to think before you start writing.
+对每个【【【】】】内的段落，生成一个麦肯锡风格的PPT标题，需要直接表明观点或事实
+输出格式：
+Title="生成标题"
+Content="段落内容"
 
-  for (const paragraph of paragraphs) {
-    const prompt = await generateSingleImagePrompt(paragraph.content, paragraph.summary);
-    prompts.push(prompt);
-  }
+*内容中无需再有【【【】】】标记
 
-  return prompts;
-}
+# 输入段落：
+${imageParagraphs}
 
-async function generateSingleImagePrompt(content: string, summary: string): Promise<string> {
-  const prompt = `Please think in English and output in English.
-
-你的任务是：从以下段落中，提取**适合用科学示意图或数据图表表达的信息结构**。
-
-段落内容：
-${content}
-
-概括：
-${summary}
+请开始处理：
 
 提取时，必须优先考虑以下类型（按优先级）：
 1. 生物学机制结构（靶点 / 通路 / 作用关系）
-2. 临床试验结构（分组、终点、时间线）
-3. 临床数据结构（数值、比例、变化趋势）
-4. 管线与适应症对应关系
+2. 管线与适应症对应关系
+3. 临床试验结构（分组、终点、时间线）
+4. 临床数据结构（数值、比例、变化趋势）
 
 请输出一个简洁的英文图片生成提示词（50-100词），描述应该生成什么样的科学插图。
 
@@ -1560,18 +1549,22 @@ ${summary}
 // Step 6a: Cover Image Generation (封面圖生成)
 // =====================
 
-export async function generateCoverImage(title: string, summary: string): Promise<{ imageUrl: string; mimeType: string }> {
-  const themeKeywords = extractThemeKeywords(title + ' ' + summary);
+A stunning, photorealistic hero image for a premium business magazine cover.
 
-  const prompt = `A clean, professional cover image suitable for a biotech research report.
+Scene: ${themeKeywords}
+
+Style specifications:
+- Minimalist, restrained, research-oriented
+- Soft, neutral color palette
+- Flat or lightly dimensional scientific illustration style
+- Professional photography quality, 8K resolution
+- Aspect ratio 16:9 landscape format
+- Modern corporate aesthetic, Fortune 500 magazine quality
 
 Theme:
 ${themeKeywords}
 
-Visual style:
-- Minimalist, restrained, research-oriented
-- Soft, neutral color palette
-- Flat or lightly dimensional scientific illustration style
+
 
 Allowed elements:
 - Molecular structures (schematic, not photorealistic)
