@@ -357,30 +357,41 @@ export async function generateImagePrompts(imageText: string): Promise<string[]>
 }
 
 async function generateSingleImagePrompt(content: string, summary: string): Promise<string> {
-  const prompt = `Please think in English and output in English.
+  const prompt = `Please think in English and output in Chinese. Give yourself more time to think before you start writing.
 
-你的任务是：从以下段落中，提取**适合用科学示意图或数据图表表达的信息结构**。
+你的任务是为以下段落生成一个用于图片生成的完整指令包。
 
-段落内容：
+# 输入段落：
 ${content}
 
-概括：
+# 概括：
 ${summary}
 
-提取时，必须优先考虑以下类型（按优先级）：
-1. 生物学机制结构（靶点 / 通路 / 作用关系）
-2. 临床试验结构（分组、终点、时间线）
-3. 临床数据结构（数值、比例、变化趋势）
-4. 管线与适应症对应关系
+# 输出要求：
+请按以下格式输出，确保包含所有原始数据：
 
-请输出一个简洁的英文图片生成提示词（50-100词），描述应该生成什么样的科学插图。
+【标题】
+生成一个麦肯锡风格的PPT标题，直接表明观点或事实（中文）
+
+【可视化类型】
+根据内容选择最合适的类型（只选一个）：
+- 表格：适合多维度对比数据
+- 流程图：适合机制路径、信号通路
+- 时间线：适合临床试验阶段
+- 柱状图/折线图：适合数值变化趋势
+- 结构图：适合管线与适应症关系
+
+【完整数据内容】
+将原文中所有具体数据、数值、名称、分类完整列出，不要省略任何信息。
+如果是表格，请用 markdown 表格格式呈现。
+如果是流程/结构，请用层级列表呈现。
 
 禁止事项：
+- 禁止省略原文中的任何数据
 - 禁止生成抽象概念图
-- 禁止生成"愿景型""总结型"图示
-- 禁止补充原文中不存在的数据或结构
+- 禁止补充原文中不存在的数据
 
-直接输出提示词：`;
+请开始输出：`;
 
   const result = await callLLMFast(prompt);
   return result.trim();
@@ -393,15 +404,20 @@ ${summary}
 export async function generateCoverImage(title: string, summary: string): Promise<{ imageUrl: string; mimeType: string }> {
   const themeKeywords = extractThemeKeywords(title + ' ' + summary);
 
-  const prompt = `A clean, professional cover image suitable for a biotech research report.
+  const prompt = `A stunning, photorealistic hero image for a premium business magazine cover.
 
-Theme:
-${themeKeywords}
+Scene: ${themeKeywords}
 
-Visual style:
+Style specifications:
 - Minimalist, restrained, research-oriented
 - Soft, neutral color palette
 - Flat or lightly dimensional scientific illustration style
+- Professional photography quality, 8K resolution
+- Aspect ratio 16:9 landscape format
+- Modern corporate aesthetic, Fortune 500 magazine quality
+
+Theme:
+${themeKeywords}
 
 Allowed elements:
 - Molecular structures (schematic, not photorealistic)
@@ -488,9 +504,9 @@ async function generateImage(prompt: string, prefix: string): Promise<{ imageUrl
   try {
     const client = getGenAI();
 
-    // Use Gemini 2.0 Flash with image generation
+    // Use Gemini 3 Pro for image generation
     const model = client.getGenerativeModel({
-      model: 'gemini-2.0-flash-exp',
+      model: 'gemini-3-pro-image-preview',
       generationConfig: {
         responseModalities: ['image', 'text'],
       } as any,
@@ -504,7 +520,7 @@ Style requirements:
 - No text or labels in the image
 - Suitable for biotech research report`;
 
-    console.log('Generating image with Gemini 2.0:', prompt.substring(0, 100));
+    console.log('Generating image with Gemini 3 Pro:', prompt.substring(0, 100));
 
     const result = await model.generateContent(imagePrompt);
     const response = await result.response;

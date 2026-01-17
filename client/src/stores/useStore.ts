@@ -193,11 +193,29 @@ export const useStore = create<AppState>((set, get) => ({
       const article = await api.createArticle(companyName);
       // Reload articles from server to ensure sync
       const articles = await api.getArticles();
+      // Reset all article-related state when creating new article
       set({
         articles,
         currentArticle: article,
         companyName,
         currentStep: 1,
+        // Reset all previous article data
+        sessionId: null,
+        upperPart: '',
+        lowerPart: '',
+        upperPartFile: '',
+        lowerPartFile: '',
+        researchId: null,
+        extractedText: '',
+        referenceArticle: '',
+        storyline: '',
+        articleMarkdown: '',
+        imageText: '',
+        articleSkeleton: '',
+        imagePrompts: [],
+        generatedImages: [],
+        coverImage: '',
+        finalArticle: '',
       });
       return article;
     } catch (error) {
@@ -243,6 +261,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       const result = await api.generateFramework(companyName, currentArticle?.id);
       set({
+        companyName,
         sessionId: result.sessionId,
         upperPart: result.upperPart,
         lowerPart: result.lowerPart,
