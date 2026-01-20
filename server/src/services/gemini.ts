@@ -77,7 +77,7 @@ export async function generateResearchFramework(companyName: string): Promise<{ 
     'utf-8'
   );
 
-  const prompt = promptTemplate.replace('[Insert biotech company name, e.g. Argenx / Viking Therapeutics]', companyName);
+  const prompt = promptTemplate.replace('[Insert Company Name]', companyName);
 
   const fullFramework = await callLLMFast(prompt);
 

@@ -174,35 +174,29 @@ export async function saveJiuqianPrompt(prompt: string): Promise<void> {
 // =====================
 
 export async function uploadFile(buffer: Buffer, filename: string): Promise<string> {
-  // Try GCS first if available
-  if (storage && gcsAvailable) {
-    try {
-      const bucket = storage.bucket(BUCKET_NAME);
-      const file = bucket.file(`files/${filename}`);
-
-      await file.save(buffer, {
-        metadata: { contentType: getContentType(filename) },
-      });
-
-      // Note: makePublic() removed - bucket should be configured with public access
-      const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/files/${filename}`;
-      console.log('Image uploaded to GCS:', publicUrl);
-      return publicUrl;
-    } catch (error) {
-      console.error('GCS upload failed, falling back to local storage:', error);
-      // Fall through to local storage
-    }
+  // GCS is required for image uploads
+  if (!storage || !gcsAvailable) {
+    const errorMsg = 'Google Cloud Storage 未初始化，無法上傳圖片。請檢查 GCS 設定。';
+    console.error(errorMsg);
+    throw new Error(errorMsg);
   }
 
-  // Local storage fallback
-  const filePath = path.join(DATA_DIR, 'files', filename);
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  try {
+    const bucket = storage.bucket(BUCKET_NAME);
+    const file = bucket.file(`files/${filename}`);
+
+    await file.save(buffer, {
+      metadata: { contentType: getContentType(filename) },
+    });
+
+    const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/files/${filename}`;
+    console.log('Image uploaded to GCS:', publicUrl);
+    return publicUrl;
+  } catch (error) {
+    const errorMsg = `GCS 上傳失敗: ${(error as Error).message}`;
+    console.error(errorMsg, error);
+    throw new Error(errorMsg);
   }
-  fs.writeFileSync(filePath, buffer);
-  console.log('Image saved locally:', filePath);
-  return `/data/files/${filename}`;
 }
 
 // =====================
