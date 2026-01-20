@@ -260,30 +260,38 @@ ${WRITING_STYLE_REQUIREMENTS}
 
 export async function generateImageText(articleMarkdown: string): Promise<string> {
   const prompt = `Please think in English and output in Chinese. Give yourself more time to think before you start writing.
-第一步：请你浏览全文，筛选出其中你认为信息密度过高、文字阅读体验不好、可读性最差、适合用PPT呈现的段落/ 章节们，以及所有表格；你至多可以选择2000字左右的段落/ 章节（表格必选），但需要至少选择出5个段落
-满足以下至少一项条件的内容優先：
-1. 机制路径、靶点作用逻辑、信号通路描述
+
+【硬性限制 - 必须严格遵守】
+- 段落数量：最少5个，最多8个，绝对不得超过8个
+- 如果你选择超过8个段落，整个输出将被视为无效
+- 请在选择时进行优先级排序，只保留最重要的5-8个
+
+你至多可以选择2000字左右的内容（表格必选），但需要至少选择出5个段落
+
+第一步：请你浏览全文，筛选出其中你认为信息密度过高、文字阅读体验不好、可读性最差、适合用PPT呈现的段落/ 章节以及所有表格；你至多可以选择2000字左右的内容（表格必选可超過8個），但需要至少选择出5个不連續的段落
+满足以下至少一项条件的内容優先（按优先级排序）：
+1. 临床结果的数据性总结（有效性 / 安全性）- 最高优先
 2. 临床试验设计（入组标准、终点、分组）
-3. 临床结果的数据性总结（有效性 / 安全性）
+3. 机制路径、靶点作用逻辑、信号通路描述
 4. 管线结构、适应症扩展逻辑
 5. 多药物 / 多机制的对比信息
-第二步：在原文中增加特殊段落标记，把你筛选出的内容用三个中括号括起来，其他内容一个字都不要修改
+
+第二步：针对每一个你筛选出的段落，请将其完整复制一遍并置于原段落的上方；然后用三个中括号 【【【 和 】】】 将上方复制出的段落括起来，下方的原段落保持原样，不要做任何修改
 
 第三步：在每个被标记段落前，用不超过100字的中文，概括该段落**希望通过图示澄清的科学或临床问题**。
 概括必须是完整句子，不得使用营销或宣传语言。
 
-第四步：输出加上概括、打上特殊段落标记的全文，再次注意：除了概括与特殊标记，其他一个字都不要修改，且"【【【""】】】"必须成对出现
+第四步：输出包含特殊标记的全文。再次注意：除了增加的 【【【...】】】 副本外，原文其他内容一个字都不要修改，且 【【【 】】】 必须成对出现
+
+输出示例：
+...原文...
+【【【你筛选出的段落副本】】】
+你筛选出的段落（原文）
+...原文...
 
 注意：
 - 禁止选择纯叙事性、判断性、结论性段落
 - 禁止为了"好看"而选择内容
-
-输出示例：
-
-...原文...
-三句完整的话概括
-【【【你筛选出的段落】】】
-...原文...
 
 # 输入文章：
 ${articleMarkdown}
@@ -314,7 +322,7 @@ export function generateArticleSkeleton(articleMarkdown: string, imageText: stri
   return skeleton;
 }
 
-function extractMarkedBlocks(imageText: string): string[] {
+function extractMarkedBlocks(imageText: string, maxBlocks: number = 8): string[] {
   const blocks: string[] = [];
   const regex = /【【【([\s\S]*?)】】】/g;
   let match;
@@ -323,10 +331,16 @@ function extractMarkedBlocks(imageText: string): string[] {
     blocks.push(match[1].trim());
   }
 
+  // 硬性限制：最多返回 maxBlocks 個區塊
+  if (blocks.length > maxBlocks) {
+    console.log(`Warning: Found ${blocks.length} blocks, limiting to ${maxBlocks}`);
+    return blocks.slice(0, maxBlocks);
+  }
+
   return blocks;
 }
 
-export function extractImageParagraphs(imageText: string): { content: string; summary: string }[] {
+export function extractImageParagraphs(imageText: string, maxParagraphs: number = 8): { content: string; summary: string }[] {
   const paragraphs: { content: string; summary: string }[] = [];
   const regex = /([^【】]+?)【【【([\s\S]*?)】】】/g;
   let match;
@@ -335,6 +349,12 @@ export function extractImageParagraphs(imageText: string): { content: string; su
     const summary = match[1].trim().split('\n').slice(-3).join('\n'); // Get last 3 lines as summary
     const content = match[2].trim();
     paragraphs.push({ summary, content });
+  }
+
+  // 硬性限制：最多返回 maxParagraphs 個段落
+  if (paragraphs.length > maxParagraphs) {
+    console.log(`Warning: Found ${paragraphs.length} paragraphs, limiting to ${maxParagraphs}`);
+    return paragraphs.slice(0, maxParagraphs);
   }
 
   return paragraphs;
@@ -436,65 +456,36 @@ The image should convey scientific seriousness and analytical intent, not innova
 }
 
 export async function generateBlockImage(imagePrompt: string, index: number): Promise<{ url: string; index: number }> {
-  const fullPrompt = `Generate Image: Create a professional scientific infographic or data visualization
-using ONLY the information explicitly provided in the Image Block Content.
+  const fullPrompt = `Generate Image: Create a professional scientific infographic or data visualization using ONLY the information explicitly provided in Assistant Response (R).Content.
 
-Image Block Content is the sole source of truth for this image.
-You may only reorganize, summarize, and visualize what is already present
-in the Image Block Content.
+Use Assistant Response (R) to define the topic and structure the overall thought.
 
-Content focus:
-${imagePrompt}
+***CRITICAL INSTRUCTION: Construct a High-Density, Professional Layout. Organize the content into coherent visual modules (e.g., Main Chart + Key Metrics + Contextual Annotations). Maximize canvas utilization while maintaining a clean, flat aesthetic.***
 
-Use the Image Block Content to define the topic and structure the overall thought.
+MUST Follow the Given "Style Spec". Be Thoughtful & Exhaustive within the bounds of Content. Minimize ALL Textual Redundancies in the Output. Avoid ALL Ambiguities.
 
-MUST Follow the Given "Style Spec".
-Be thoughtful and exhaustive strictly within the bounds of the Image Block Content.
-Minimize ALL textual redundancies in the output.
-Avoid ALL ambiguities.
+Hard Constraint (Resolution): The output MUST be rendered in 2K Ultra-High Definition (2560×1440 pixels) to ensure all text and data points are razor-sharp.
 
-Hard Constraint:
-Do NOT introduce any facts, numbers, names, categories, interpretations,
-or claims that are not explicitly present in the Image Block Content.
-
-Design requirements:
-- Purpose: clarify biological mechanism, clinical trial structure, or data relationship
-- Style: clean, academic, neutral
-- Color usage: restrained, functional (no neon, no dramatic contrast)
-- Visual language: suitable for inclusion in a scientific or equity research report
-
-If applicable:
-- Clearly label components (e.g. target, pathway step, treatment arm)
-- Use arrows only to indicate causal or procedural relationships
-- Maintain logical hierarchy and readability
-
-Strict prohibitions:
-- No futuristic or abstract visuals
-- No cityscapes, light effects, or technology aesthetics
-- No decorative icons
-- No exaggeration or dramatization
-
-The image must be interpretable as a scientific explanatory figure,
-not a marketing or summary graphic.
+Hard Constraint (Content): Do NOT introduce any facts, numbers, names, categories, or claims that are not explicitly present in R.Content. You may only reorganize, summarize, and visualize what is already in R.Content.
 
 Source Line Rule (MUST):
 1. In the footer source position, output a single line beginning with 来源：.
-2. Automatically extract and list all explicitly mentioned sources from the Image Block Content
-   (e.g., 年报/财报/招股书/公告/官网/研报/数据库/统计机构/媒体与报告标题等).
+2. Automatically extract and list all explicitly mentioned sources from R.Content (e.g., 年报/财报/招股书/公告/官网/研报/数据库/统计机构/媒体与报告标题等).
 3. De-duplicate extracted sources while preserving first-appearance order.
 4. Use the Chinese semicolon ； to separate items.
-5. Always end the source line with 桌面研究；久谦中台 (exactly once).
-6. If no explicit sources are found, output exactly:
-   来源：桌面研究；久谦中台
+5. Always end the source line with 桌面研究；久谦中台 (exactly once; do not duplicate these words if they already appear among extracted sources).
+6. If no explicit sources are found in R.Content, output exactly: 来源：桌面研究；久谦中台
 7. Do NOT add quotation marks anywhere in the source line.
 
 Style Spec:
-1. Purpose and tone: professional, authoritative infographic using a flat aesthetic; data-first layouts with consistent rules so all agents produce identical outputs. All visible text must be in Simplified Chinese (titles, labels, legends, footnotes, sources, and annotations).
-2. Canvas and layout: 16:9 aspect (default 1920x1080 px). Margins 24 px on all sides. Chart Title headline at top-left with optional subtitle below. Chart Footer line at bottom left for BOTH footnotes and source (place footnote at one line above source). Default legend top-right inside the chart; if space is constrained, place it below the chart.
-3. Typography: Microsoft YaHei (微软雅黑). Font sizes at 1920x1080: title 24px, subtitle 10, body and labels 10 px, axis ticks and legend 8px, footnotes 8 px. Title weight 600; other text 150. Use these sizes only and keep a consistent hierarchy. Left-align labels and values. Avoid mixed fonts.
-4. Color system overview: Built on a clinical foundation of paper white and structure gray, this palette prioritizes content through high-contrast neutrality. Ink black softens the reading experience, while slate defines secondary hierarchy. Color serves a strict utility: Deep navy anchors the design, and alert red acts as a deliberate disruption for urgency, resulting in a distraction-free aesthetic governed purely by function.
-5. Encodings and strokes: Use color to differentiate categories or phases; use size, area, or line thickness to encode magnitude. Default strokes: data lines 2 px (emphasis 3 px), axes 0.5 px, gridlines 0.5 px. Points are 4 px circles, bars have 8 px gaps and 0.5 px corner radius (sharp edges), area fills at 75% opacity. MUST Not Have gradients, glows, or ANY heavy effects.
-6. Numbers, dates, and units (Chinese conventions): Use Arabic numerals; prefer scaled units 万 or 亿 to shorten large values (e.g., 2.35亿). If not scaled, use comma thousands separator (12,345). Decimals: 1 place for KPIs, 2 for financials. Percent format: 12.3%. Dates: YYYY年M月 (e.g., 2025年1月) or YYYY年Qx季度 for quarters. Currency: prefix with ¥ (e.g., ¥2.3亿). Use Chinese labels for axes, legends, and notes; employ the Chinese colon "：" in label pairs. Always state measurement units in axis titles or subtitles; place assumptions in footnotes.`;
+1. Purpose and tone: professional, authoritative infographic using a flat aesthetic; data-first layouts with consistent rules. All visible text must be in Simplified Chinese (titles, labels, legends, footnotes, sources, and annotations).
+2. Canvas and layout: STRICT 2K Resolution (2560x1440 px) with 16:9 aspect ratio. High pixel density is mandatory for readability. Margins 24 px on all sides. Chart Title headline at top-left with optional subtitle below. Chart Footer line at bottom left for BOTH footnotes and source (place footnote at one line above source). Default legend top-right inside the chart; if space is constrained, place it below the chart. **Adopt a modular grid layout to support high information density without clutter.**
+3. Typography: Microsoft YaHei (微软雅黑). Optimized for 2K display: Font sizes at 2560x1440: title 24px, subtitle 10, body and labels 10 px, axis ticks and legend 8px, footnotes 8 px. Title weight 600; other text 150. Use these sizes only and keep a consistent hierarchy. Left-align labels and values. Avoid mixed fonts.
+4. Color system overview: Built on a clinical foundation of paper white and structure gray, this palette prioritizes content through high-contrast neutrality. Ink black softens the reading experience, while slate defines secondary hierarchy. Color serves a strict utility: Deep navy anchors the design, and alert red acts as a deliberate disruption for urgency, resulting in a distraction-free aesthetic governed purely by function. **Use subtle background fills (5% opacity gray) to distinguish different content modules if necessary.**
+5. Encodings and strokes: Use color to differentiate categories or phases; use size, area, or line thickness to encode magnitude. Default strokes: data lines 2 px (emphasis 3 px), axes 0.5 px, gridlines 0.5 px. Points are 4 px circles, bars have 8 px gaps and 0.5 px corner radius (sharp edges), area fills at 75% opacity. MUST Not Have gradients, glows, or ANY heavy effects. **Use clear connectors or grouping lines to visually link related data points.**
+6. Numbers, dates, and units (Chinese conventions): Use Arabic numerals; prefer scaled units 万 or 亿 to shorten large values (e.g., 2.35亿). If not scaled, use comma thousands separator (12,345). Decimals: 1 place for KPIs, 2 for financials. Percent format: 12.3%. Dates: YYYY年M月 (e.g., 2025年1月) or YYYY年Qx季度 for quarters. Currency: prefix with ¥ (e.g., ¥2.3亿). Use Chinese labels for axes, legends, and notes; employ the Chinese colon "：" in label pairs. Always state measurement units in axis titles or subtitles; place assumptions in footnotes.
+
+{ "Assistant Response (R)": { "Title": "", "Content": "${imagePrompt}" } }`;
 
   const result = await generateImage(fullPrompt, `block_${index}`);
   return { url: result.imageUrl, index };
@@ -538,17 +529,26 @@ Style requirements:
         const filename = `${prefix}_${uuidv4()}.png`;
         const buffer = Buffer.from(base64Data, 'base64');
 
-        // Try to upload to storage
-        try {
-          const url = await uploadFile(buffer, filename);
-          return { imageUrl: url, mimeType };
-        } catch {
-          // Return as data URL if upload fails
-          return {
-            imageUrl: `data:${mimeType};base64,${base64Data}`,
-            mimeType,
-          };
+        // Try to upload to storage with retry
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            const url = await uploadFile(buffer, filename);
+            return { imageUrl: url, mimeType };
+          } catch (uploadError) {
+            console.warn(`GCS upload attempt ${attempt}/3 failed:`, (uploadError as Error).message);
+            if (attempt < 3) {
+              // Wait before retry (exponential backoff)
+              await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+            }
+          }
         }
+        // All retries failed - use placeholder instead of large data URL
+        console.error(`GCS upload failed after 3 attempts for ${filename}, using placeholder`);
+        const encodedText = encodeURIComponent(prefix.replace(/_/g, ' '));
+        return {
+          imageUrl: `https://placehold.co/2560x1440/e8e8e8/666?text=${encodedText}`,
+          mimeType: 'image/png',
+        };
       }
     }
 
